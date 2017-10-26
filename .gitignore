@@ -1,6 +1,7 @@
 Debug/
 ipch/
 x64/
+.vs/
 
 SplitScreen.VC.db
 SplitScreen.VC.VC.opendb
