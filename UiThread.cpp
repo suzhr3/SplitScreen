@@ -20,7 +20,7 @@ BOOL CUiThread::InitInstance()
 {
 	//dlg = new CPictureDlg();
 	//dlg->Create(IDD__PICTURE_SHOW);			//创建该线程显示的对话框窗口
-	//dlg->ShowWindow(SW_SHOW);//显示窗口
+
 	m_pMainWnd = dlg;						//设置CWinThread类的m_pMainWnd成员，否则这个线程不会随着界面的关闭而退出。
 
 	return true;
@@ -28,7 +28,7 @@ BOOL CUiThread::InitInstance()
 
 int CUiThread::ExitInstance()
 {
-	//dlg->DestroyWindow();//销毁窗口
+	dlg->DestroyWindow();//销毁窗口
 	delete dlg;
 	return 0;
 }
@@ -40,7 +40,7 @@ int CUiThread::Run()
 		AfxMessageBox(L"打开资源失败!");
 	//获取视频总帧数
 	totalFrameNumber = static_cast<long>(capture.get(CV_CAP_PROP_FRAME_COUNT));
-
+	dlg->MoveWindow(rect.left, rect.top, rect.right, rect.bottom, true);
 	while (1)
 	{
 		if (capture.read(frame))	//循环读取视频的每一帧
@@ -48,7 +48,6 @@ int CUiThread::Run()
 			if (currentFrame <= totalFrameNumber)
 			{
 				//在线程对应的屏幕上显示
-				dlg->MoveWindow(rect.left, rect.top, rect.right, rect.bottom, true);
 				dlg->showImage(frame);
 				currentFrame++;
 			}

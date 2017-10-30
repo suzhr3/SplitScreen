@@ -12,15 +12,14 @@ class Pic
 {
 public:
 	Pic();
-	Pic(VideoCapture capture, CString videoPath, long totalFrameNumber, long currentFrame, Mat frame, bool isOpen, bool isOpenAndDBClick, bool video_play);
+	Pic(VideoCapture capture, String videoPath, long totalFrameNumber, long currentFrame, Mat frame, bool isOpen, bool video_play);
 
 public:
 	VideoCapture capture;
-	CString videoPath;
+	String videoPath;
 	Mat frame;
 	long totalFrameNumber;
 	long currentFrame;
 	bool isOpen;
-	bool isOpenAndDBClick;
 	bool video_play;
 };

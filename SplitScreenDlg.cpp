@@ -3,6 +3,7 @@
 #include "stdafx.h"
 #include "SplitScreen.h"
 #include "SplitScreenDlg.h"
+#include "MainDlg.h"
 #include "afxdialogex.h"
 
 #include "CvvImage.h"
@@ -22,10 +23,17 @@
 using namespace std;
 using namespace cv;
 
-CPictureDlg* dlg1;
-CPictureDlg* dlg2;
-CPictureDlg* dlg3;
-CPictureDlg* dlg4;
+struct winPt 
+{
+	CDC* pDC;
+	CRect rect;
+};
+winPt* pt = new winPt[4];		//传给四个线程使用的参数
+
+CPictureDlg* dlg1 = NULL;
+CPictureDlg* dlg2 = NULL;
+CPictureDlg* dlg3 = NULL;
+CPictureDlg* dlg4 = NULL;
 
 bool close_thread1 = false;
 bool close_thread2 = false;
@@ -33,14 +41,12 @@ bool close_thread3 = false;
 bool close_thread4 = false;
 
 
-
 int delay = 1;		//相当于每秒30帧
 int total_num_of_screen = GetSystemMetrics(SM_CMONITORS);		//总屏幕数
 int num_without_PrimaryScreen = total_num_of_screen - 1;		//副屏个数
-CRect * rect = new CRect[total_num_of_screen];					//存储屏幕的信息
-int click_picture = 0;											
-int m = 1;
+CRect * rect = new CRect[total_num_of_screen];					//存储屏幕的信息									
 
+//用于同步用
 CString syn_videoPath;
 VideoCapture syn_capture;
 long totalframe;
@@ -51,7 +57,7 @@ bool syn_isOpen = false;
 bool syn_isOpenAndDBClick = false;
 bool syn_video_play = false;
 
-CPictureDlg* expanse1 = NULL;			//四个缩略图对象
+CPictureDlg* expanse1 = NULL;			//点击4个缩略图对象之后弹出的4个全屏对话框
 CPictureDlg* expanse2 = NULL;
 CPictureDlg* expanse3 = NULL;
 CPictureDlg* expanse4 = NULL;
@@ -61,9 +67,7 @@ Pic * pic = new Pic[4];					//对应4幅播放的视频或者图片的对象
 //检测屏幕的回调函数
 BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData);
 
-
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
-
 class CAboutDlg : public CDialogEx
 {
 public:
@@ -81,16 +85,13 @@ public:
 protected:
 	DECLARE_MESSAGE_MAP()
 };
-
 CAboutDlg::CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
 {
 }
-
 void CAboutDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 }
-
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialogEx)
 END_MESSAGE_MAP()
 
@@ -100,31 +101,18 @@ CSplitScreenDlg::CSplitScreenDlg(CWnd* pParent /*=NULL*/)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 
-	//输出的4个图片对话框
-	dlg1 = NULL;			
-	dlg2 = NULL;
-	dlg3 = NULL;
-	dlg4 = NULL;
 }
-
 //析构函数
 CSplitScreenDlg::~CSplitScreenDlg()
 {
-	if (dlg1 != NULL)
-		delete dlg1;
-	if (dlg2 != NULL)
-		delete dlg2;
-	if (dlg3 != NULL)
-		delete dlg3;
-	if (dlg4 != NULL)
-		delete dlg4;
+	
 }
+
 
 void CSplitScreenDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
 }
-
 BEGIN_MESSAGE_MAP(CSplitScreenDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
@@ -179,18 +167,6 @@ BOOL CSplitScreenDlg::OnInitDialog()
 	//获取显示器相关信息
 	EnumDisplayMonitors(NULL, NULL, &MonitorEnumProc, 0);
 
-	pThread1 = new CUiThread();
-	pThread1->CreateThread(CREATE_SUSPENDED);
-	
-	pThread2 = new CUiThread();
-	pThread2->CreateThread(CREATE_SUSPENDED);
-
-	pThread3 = new CUiThread();
-	pThread3->CreateThread(CREATE_SUSPENDED);
-
-	pThread4 = new CUiThread();
-	pThread4->CreateThread(CREATE_SUSPENDED);
-
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 //EnumDisplayMonitors的回调函数
@@ -236,7 +212,6 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 	}
 	return TRUE;
 }
-
 
 //BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData)
 //{
@@ -302,13 +277,155 @@ void CSplitScreenDlg::OnPaint()
 		CDialogEx::OnPaint();
 	}
 }
-
-//当用户拖动最小化窗口时系统调用此函数取得光标
-//显示。
+//当用户拖动最小化窗口时系统调用此函数取得光标显示。
 HCURSOR CSplitScreenDlg::OnQueryDragIcon()
 {
 	return static_cast<HCURSOR>(m_hIcon);
 }
+
+
+
+UINT ThreadProc1(LPVOID pM)
+{
+	winPt* pt = (winPt*)pM;			//获取线程传过来的参数
+
+	pic[0].capture.open(pic[0].videoPath);
+	if (!pic[0].capture.isOpened())
+		AfxMessageBox(L"打开资源失败!");
+	//获取视频总帧数
+	pic[0].totalFrameNumber = static_cast<long>(pic[0].capture.get(CV_CAP_PROP_FRAME_COUNT));
+	dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
+	while (1)
+	{
+		if (pic[0].capture.read(pic[0].frame))	//循环读取视频的每一帧
+		{
+			//在屏幕1上显示
+			dlg1->showImage(pic[0].frame);
+			//在主窗口的第1个图片缩略框中显示
+			dlg1->ShowSmallPic(pt->pDC, pic[0].frame, pt->rect);
+
+			//双击了缩略图1则放大缩略图1
+			if (expanse1 != NULL && expanse1->openExpanseDlg == true)
+			{
+				expanse1->showImage(pic[0].frame);
+			}
+		}
+		else			//视频播放完毕或者读取帧出错
+			break;
+		if (close_thread1 == true)
+		{
+			return 0;
+		}
+		Sleep(1);		//视频播放每帧间隔（单位:ms）
+	}
+	return 0;
+}
+UINT ThreadProc2(LPVOID pM)
+{
+	winPt* pt = (winPt*)pM;			//获取线程传过来的参数
+
+	pic[1].capture.open(pic[1].videoPath);
+	if (!pic[1].capture.isOpened())
+		AfxMessageBox(L"打开资源失败!");
+	//获取视频总帧数
+	pic[1].totalFrameNumber = static_cast<long>(pic[1].capture.get(CV_CAP_PROP_FRAME_COUNT));
+	dlg2->MoveWindow(rect[2].left, rect[2].top, rect[2].right, rect[2].bottom, true);
+	while (close_thread2 == false)
+	{
+		if (pic[1].capture.read(pic[1].frame))	//循环读取视频的每一帧
+		{
+			//在屏幕2上显示
+			dlg2->showImage(pic[1].frame);
+			//在主窗口的第2个图片缩略框中显示
+			dlg2->ShowSmallPic(pt->pDC, pic[1].frame, pt->rect);
+
+			//双击了缩略图2则放大缩略图2
+			if (expanse2 != NULL && expanse2->openExpanseDlg == true)
+			{
+				expanse2->showImage(pic[1].frame);
+			}
+		}
+		else			//视频播放完毕或者读取帧出错
+			break;
+		if (close_thread2 == true)
+		{
+			return 0;
+		}
+		Sleep(1);		//视频播放每帧间隔（单位:ms）
+	}
+	return 0;
+}
+UINT ThreadProc3(LPVOID pM)
+{
+	winPt* pt = (winPt*)pM;
+
+	pic[2].capture.open(pic[2].videoPath);
+	if (!pic[2].capture.isOpened())
+		AfxMessageBox(L"打开资源失败!");
+	//获取视频总帧数
+	pic[2].totalFrameNumber = static_cast<long>(pic[2].capture.get(CV_CAP_PROP_FRAME_COUNT));
+	dlg3->MoveWindow(rect[3].left, rect[3].top, rect[3].right, rect[3].bottom, true);
+
+	while (close_thread3 == false)
+	{
+		if (pic[2].capture.read(pic[2].frame))	//循环读取视频的每一帧
+		{
+			//在屏幕3上显示
+			dlg3->showImage(pic[2].frame);
+			//在主窗口的第3个图片缩略框中显示
+			dlg3->ShowSmallPic(pt->pDC, pic[2].frame, pt->rect);
+			//双击了缩略图3则放大缩略图3
+			if (expanse3 != NULL && expanse3->openExpanseDlg == true)
+			{
+				expanse3->showImage(pic[2].frame);
+			}
+		}
+		else			//视频播放完毕或者读取帧出错
+			break;
+		if (close_thread3 == true)
+		{
+			return 0;
+		}
+		Sleep(1);		//视频播放每帧间隔（单位:ms）
+	}
+	return 0;
+}
+UINT ThreadProc4(LPVOID pM)
+{
+	winPt* pt = (winPt*)pM;
+
+	pic[3].capture.open(pic[3].videoPath);
+	if (!pic[3].capture.isOpened())
+		AfxMessageBox(L"打开资源失败!");
+	//获取视频总帧数
+	pic[3].totalFrameNumber = static_cast<long>(pic[3].capture.get(CV_CAP_PROP_FRAME_COUNT));
+	dlg4->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);
+
+	while (close_thread4 == false)
+	{
+		if (pic[3].capture.read(pic[3].frame))	//循环读取视频的每一帧
+		{
+			//在屏幕4上显示
+			dlg4->showImage(pic[3].frame);
+			//在主窗口的第4个图片缩略框中显示
+			dlg4->ShowSmallPic(pt->pDC, pic[3].frame, pt->rect);
+			//双击了缩略图4则放大缩略图4
+			if (expanse4 != NULL && expanse4->openExpanseDlg == true)
+			{
+				expanse4->showImage(pic[3].frame);
+			}
+		}
+		else			//视频播放完毕或者读取帧出错
+			break;
+		if (close_thread4 == true)
+		{
+			return 0;
+		}
+		Sleep(1);		//视频播放每帧间隔（单位:ms）
+	}
+	return 0;
+}
+
 
 //在缩略图1上双击
 void CSplitScreenDlg::OnStnDblclickSmallPicture1()
@@ -316,12 +433,17 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture1()
 	//如果缩略图1已经在播放视频了，则双击它之后会放大缩略图内容
 	if (pic[0].isOpen == true)
 	{
+		if (expanse1 != NULL)
+		{
+			expanse1->CloseWindow();
+			delete expanse1;
+			expanse1 = NULL;
+		}
 		expanse1 = new CPictureDlg();
 		expanse1->Create(IDD__PICTURE_SHOW, this);
 		expanse1->SetWindowText(L"屏幕一的全屏");
 		expanse1->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);	//在主屏幕上全屏显示
 		SetWindowLong(expanse1->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse1->m_hWnd, GWL_STYLE) + WS_CAPTION);
-		pic[0].isOpenAndDBClick = true;
 		expanse1->openExpanseDlg = true;
 	}
 	//如果缩略图1没有在播放视频，则双击它之后会提示用户导入资源
@@ -329,72 +451,26 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture1()
 	{
 		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
 		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-
 		if (filedlg.DoModal() == IDOK)
 		{
-			//创建线程1的同时先挂起该线程
-			
-			//初始化该线程的一些参数
-			dlg1 = new CPictureDlg();
-			dlg1->Create(IDD__PICTURE_SHOW, this);
-			pThread1->dlg = dlg1;
+			if (NULL == dlg1)
+			{
+				dlg1 = new CPictureDlg();
+				dlg1->Create(IDD__PICTURE_SHOW, this);
+			}
 			CString cpath = filedlg.GetPathName();
-			pThread1->path = CW2A(cpath.GetString());
-			pThread1->rect = rect[1];
-			/*pThread1->rect.left = rect[1].left;
-			pThread1->rect.top = rect[1].top;
-			pThread1->rect.right = rect[1].right;
-			pThread1->rect.bottom = rect[1].bottom;*/
+			pic[0].videoPath = CW2A(cpath.GetString());					//获取屏幕1的视频播放路径
+			pic[0].isOpen = true;										//屏幕1打开了
+		    pic[0].video_play = true;									//屏幕1正在播放
 
-			pThread1->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
+			//获取主窗口上第1个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();         //获得缩略图1上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		//获取缩略图1上控件的显示区 
+			pt[0].pDC = pDC;
+			pt[0].rect = rect;
 
-											//初始化该线程的一些参数
-			//CString cpath2 = filedlg.GetPathName();
-			//pThread2->path = CW2A(cpath.GetString());
-			//pThread2->rect = rect[2];
-			///*pThread2->rect.left = rect[2].left;
-			//pThread2->rect.top = rect[2].top;
-			//pThread2->rect.right = rect[2].right;
-			//pThread2->rect.bottom = rect[2].bottom;*/
-
-			//pThread2->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
-
-
-			//								//初始化该线程的一些参数
-			//CString cpath3 = filedlg.GetPathName();
-			//pThread3->path = CW2A(cpath.GetString());
-			//pThread3->rect = rect[3];
-			///*pThread3->rect.left = rect[3].left;
-			//pThread3->rect.top = rect[3].top;
-			//pThread3->rect.right = rect[3].right;
-			//pThread3->rect.bottom = rect[3].bottom;*/
-
-			//pThread3->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
-
-
-			//								//初始化该线程的一些参数
-			//CString cpath4 = filedlg.GetPathName();
-			//pThread4->path = CW2A(cpath.GetString());
-			//pThread4->rect = rect[4];
-			///*pThread4->rect.left = rect[4].left;
-			//pThread4->rect.top = rect[4].top;
-			//pThread4->rect.right = rect[4].right;
-			//pThread4->rect.bottom = rect[4].bottom;*/
-
-			//pThread4->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
-
-
-		//	TerminateThread(pThread1->m_hThread, 0);		//终止线程
-			//pThread1 = new CUiThread();
-			//pThread1->CreateThread();
-			//int ret1 = PostThreadMessage(pThread1->m_nThreadID, WM_SPLASH_NOTIFY, 0, 0);
-			//if (ret1 == 0)    // :检查返回值,是否失败.
-			//{
-			//	AfxMessageBox(L"post thread msg error  1!");
-			//}
-
-	//		pic[0].isOpen = true;
-	//		pic[0].video_play = true;
+			pic_pthread1 = AfxBeginThread(ThreadProc1, &pt[0]);			//启动线程1来播放视频1
 		}
 	}
 	else
@@ -407,12 +483,17 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture2()
 	//如果缩略图2已经在播放视频了，则双击它之后会放大缩略图内容
 	if (pic[1].isOpen == true)
 	{
+		if (expanse2 != NULL)
+		{
+			expanse2->CloseWindow();
+			delete expanse2;
+			expanse2 = NULL;
+		}
 		expanse2 = new CPictureDlg();
 		expanse2->Create(IDD__PICTURE_SHOW, this);
 		expanse2->SetWindowText(L"屏幕二的全屏");
 		expanse2->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);	//在主屏幕上全屏显示
 		SetWindowLong(expanse2->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse2->m_hWnd, GWL_STYLE) + WS_CAPTION);
-		pic[1].isOpenAndDBClick = true;
 		expanse2->openExpanseDlg = true;
 	}
 	//如果缩略图2没有在播放视频，则双击它之后会提示用户导入资源
@@ -420,27 +501,26 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture2()
 	{
 		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
 		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-
 		if (filedlg.DoModal() == IDOK)
 		{
-			//创建线程2的同时先挂起该线程
-			
-			//初始化该线程的一些参数
-			dlg2 = new CPictureDlg();
-			dlg2->Create(IDD__PICTURE_SHOW, this);
-			pThread2->dlg = dlg2;
-
+			if (NULL == dlg2)
+			{
+				dlg2 = new CPictureDlg();
+				dlg2->Create(IDD__PICTURE_SHOW, this);
+			}
 			CString cpath = filedlg.GetPathName();
-			pThread2->path = CW2A(cpath.GetString());
-			pThread2->rect.left = rect[2].left;
-			pThread2->rect.top = rect[2].top;
-			pThread2->rect.right = rect[2].right;
-			pThread2->rect.bottom = rect[2].bottom;
+			pic[1].videoPath = CW2A(cpath.GetString());					//获取屏幕2的视频播放路径
+			pic[1].isOpen = true;										//屏幕2打开了
+			pic[1].video_play = true;									//屏幕2正在播放
 
-			pThread2->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
+			//获取主窗口上第2个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();         //获得缩略图2上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取缩略图2上控件的显示区 
+			pt[1].pDC = pDC;
+			pt[1].rect = rect;
 
-	//		pic[1].isOpen = true;
-	//		pic[1].video_play = true;
+			pic_pthread2 = AfxBeginThread(ThreadProc2, &pt[1]);			//启动线程2来播放视频2
 		}
 	}
 	else
@@ -453,12 +533,17 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture3()
 	//如果缩略图3已经在播放视频了，则双击它之后会放大缩略图内容
 	if (pic[2].isOpen == true)
 	{
+		if (expanse3 != NULL)
+		{
+			expanse3->CloseWindow();
+			delete expanse3;
+			expanse3 = NULL;
+		}
 		expanse3 = new CPictureDlg();
 		expanse3->Create(IDD__PICTURE_SHOW, this);
 		expanse3->SetWindowText(L"屏幕三的全屏");
 		expanse3->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);	//在主屏幕上全屏显示
 		SetWindowLong(expanse3->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse3->m_hWnd, GWL_STYLE) + WS_CAPTION);
-		pic[2].isOpenAndDBClick = true;
 		expanse3->openExpanseDlg = true;
 	}
 	//如果缩略图3没有在播放视频，则双击它之后会提示用户导入资源
@@ -466,27 +551,26 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture3()
 	{
 		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
 		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-
 		if (filedlg.DoModal() == IDOK)
-		{
-			//创建线程3的同时先挂起该线程
-			
-			//初始化该线程的一些参数
-			dlg3 = new CPictureDlg();
-			dlg3->Create(IDD__PICTURE_SHOW, this);
-			pThread3->dlg = dlg3;
-
+		{		
+			if (NULL == dlg3)
+			{
+				dlg3 = new CPictureDlg();
+				dlg3->Create(IDD__PICTURE_SHOW, this);
+			}
 			CString cpath = filedlg.GetPathName();
-			pThread3->path = CW2A(cpath.GetString());
-			pThread3->rect.left = rect[3].left;
-			pThread3->rect.top = rect[3].top;
-			pThread3->rect.right = rect[3].right;
-			pThread3->rect.bottom = rect[3].bottom;
+			pic[2].videoPath = CW2A(cpath.GetString());					//获取屏幕3的视频播放路径
+			pic[2].isOpen = true;										//屏幕3打开了
+			pic[2].video_play = true;									//屏幕3正在播放
 
-			pThread3->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
+			//获取主窗口上第3个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();         //获得缩略图3上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取缩略图3上控件的显示区 
+			pt[2].pDC = pDC;
+			pt[2].rect = rect;
 
-	//		pic[2].isOpen = true;
-	//		pic[2].video_play = true;
+			pic_pthread3 = AfxBeginThread(ThreadProc3, &pt[2]);			//启动线程3来播放视频3
 		}
 	}
 	else
@@ -499,12 +583,17 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture4()
 	//如果缩略图4已经在播放视频了，则双击它之后会放大缩略图内容
 	if (pic[3].isOpen == true)
 	{
+		if (expanse4 != NULL)
+		{
+			expanse4->CloseWindow();
+			delete expanse4;
+			expanse4 = NULL;
+		}
 		expanse4 = new CPictureDlg();
 		expanse4->Create(IDD__PICTURE_SHOW, this);
 		expanse4->SetWindowText(L"屏幕四的全屏");
 		expanse4->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);	//在主屏幕上全屏显示
 		SetWindowLong(expanse4->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse4->m_hWnd, GWL_STYLE) + WS_CAPTION);
-		pic[3].isOpenAndDBClick = true;
 		expanse4->openExpanseDlg = true;
 	}
 	//如果缩略图4没有在播放视频，则双击它之后会提示用户导入资源
@@ -512,26 +601,26 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture4()
 	{
 		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
 		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-
 		if (filedlg.DoModal() == IDOK)
 		{
-			//创建线程4的同时先挂起该线程
-			
-			//初始化该线程的一些参数
-			dlg4 = new CPictureDlg();
-			dlg4->Create(IDD__PICTURE_SHOW, this);
-			pThread4->dlg = dlg4;
-
+			if (NULL == dlg4)
+			{
+				dlg4 = new CPictureDlg();
+				dlg4->Create(IDD__PICTURE_SHOW, this);
+			}
 			CString cpath = filedlg.GetPathName();
-			pThread4->path = CW2A(cpath.GetString());
-			pThread4->rect.left = rect[4].left;
-			pThread4->rect.top = rect[4].top;
-			pThread4->rect.right = rect[4].right;
-			pThread4->rect.bottom = rect[4].bottom;
+			pic[3].videoPath = CW2A(cpath.GetString());					//获取屏幕4的视频播放路径
+			pic[3].isOpen = true;										//屏幕4打开了
+			pic[3].video_play = true;									//屏幕4正在播放
 
-			pThread4->ResumeThread();		//初始化所有线程中需要使用到的参数后才启动该线程
-	//		pic[3].isOpen = true;
-	//		pic[3].video_play = true;
+			//获取主窗口上第4个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();         //获得缩略图4上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取缩略图4上控件的显示区 
+			pt[3].pDC = pDC;
+			pt[3].rect = rect;
+
+			pic_pthread4 = AfxBeginThread(ThreadProc4, &pt[3]);			//启动线程4来播放视频4
 		}
 	}
 	else
@@ -559,12 +648,12 @@ void CSplitScreenDlg::OnStnClickedSmallPicture1()
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
 	if (pic[0].isOpen == true && pic[0].video_play == true)
 	{
-		KillTimer(1);				//单击暂停
+		pic_pthread1->SuspendThread();				//单击暂停
 		pic[0].video_play = false;
 	}
 	else if (pic[0].isOpen == true && pic[0].video_play == false)
 	{
-		SetTimer(1, delay, NULL);	//单击继续播放
+		pic_pthread1->ResumeThread();				//单击继续播放
 		pic[0].video_play = true;
 	}
 }
@@ -590,12 +679,12 @@ void CSplitScreenDlg::OnStnClickedSmallPicture2()
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
 	if (pic[1].isOpen == true && pic[1].video_play == true)
 	{
-		KillTimer(2);				//单击暂停
+		pic_pthread2->SuspendThread();					//单击暂停
 		pic[1].video_play = false;
 	}
 	else if (pic[1].isOpen == true && pic[1].video_play == false)
 	{
-		SetTimer(2, delay, NULL);	//单击继续播放
+		pic_pthread2->ResumeThread();	//单击继续播放
 		pic[1].video_play = true;
 	}
 }
@@ -621,12 +710,12 @@ void CSplitScreenDlg::OnStnClickedSmallPicture3()
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
 	if (pic[2].isOpen == true && pic[2].video_play == true)
 	{
-		KillTimer(3);				//单击暂停
+		pic_pthread3->SuspendThread();				//单击暂停
 		pic[2].video_play = false;
 	}
 	else if (pic[2].isOpen == true && pic[2].video_play == false)
 	{
-		SetTimer(3, delay, NULL);	//单击继续播放
+		pic_pthread3->ResumeThread();	//单击继续播放
 		pic[2].video_play = true;
 	}
 }
@@ -652,372 +741,16 @@ void CSplitScreenDlg::OnStnClickedSmallPicture4()
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
 	if (pic[3].isOpen == true && pic[3].video_play == true)
 	{
-		KillTimer(4);				//单击暂停
+		pic_pthread4->SuspendThread();				//单击暂停
 		pic[3].video_play = false;
 	}
 	else if (pic[3].isOpen == true && pic[3].video_play == false)
 	{
-		SetTimer(4, delay, NULL);	//单击继续播放
+		pic_pthread4->ResumeThread();	//单击继续播放
 		pic[3].video_play = true;
 	}
 }
 
-
-
-UINT ThreadProc1(LPVOID pM)
-{
-	//pic[0].capture.open(path1);
-	if (!pic[0].capture.isOpened())
-		AfxMessageBox(L"打开资源失败!");
-	//获取视频总帧数
-	pic[0].totalFrameNumber = static_cast<long>(pic[0].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-	/*dlg1 = new CPictureDlg();
-	dlg1->Create(IDD__PICTURE_SHOW, CWnd::GetDesktopWindow());*/
-
-	while (close_thread1 == false)
-	{
-		if (pic[0].capture.read(pic[0].frame))	//循环读取视频的每一帧
-		{
-			if (pic[0].currentFrame <= pic[0].totalFrameNumber)
-			{
-				//在屏幕一上显示
-				dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
-				dlg1->showImage(pic[0].frame);
-
-				//在第一个图片缩略框中显示
-				//	CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				//HDC hDC = pt->pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				//															 //	CRect rect;
-				//															 //	GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区    
-
-				//IplImage iplImg = IplImage(pic[0].frame);
-				//CvvImage cvvImg;											//创建一个CvvImage对象  
-				//cvvImg.CopyOf(&iplImg);
-				//cvvImg.DrawToHDC(hDC, &pt->rect);
-				//cvvImg.Destroy();
-				////	ReleaseDC(pDC);
-				////双击了缩略图1则放大缩略图1
-				//if (pic[0].isOpenAndDBClick == true && expanse1->openExpanseDlg == true)
-				//{
-				//	expanse1->showImage(pic[0].frame);
-				//}
-				pic[0].currentFrame++;
-			}
-			else
-			{
-				break;
-			}
-			Sleep(1);
-		}
-		else
-			break;
-	}
-	return 0;
-}
-
-UINT ThreadProc2(LPVOID pM)
-{
-	//pic[1].capture.open(path2);
-	if (!pic[1].capture.isOpened())
-		AfxMessageBox(L"打开资源失败!");
-	//获取视频总帧数
-	pic[1].totalFrameNumber = static_cast<long>(pic[1].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-	//dlg2 = new CPictureDlg();
-	//dlg2->Create(IDD__PICTURE_SHOW, CWnd::GetDesktopWindow());
-
-
-	while (close_thread2 == false)
-	{
-		if (pic[1].capture.read(pic[1].frame))	//循环读取视频的每一帧
-		{
-			if (pic[1].currentFrame <= pic[1].totalFrameNumber)
-			{
-				//在屏幕二上显示
-				dlg2->MoveWindow(rect[2].left, rect[2].top, rect[2].right, rect[2].bottom, true);
-				dlg2->showImage(pic[1].frame);
-				pic[1].currentFrame++;
-			}
-			else
-			{
-				break;
-			}
-			Sleep(1);
-		}
-		else
-			break;
-	}
-	return 0;
-}
-
-UINT ThreadProc3(LPVOID pM)
-{
-	//pic[2].capture.open(path3);
-	if (!pic[2].capture.isOpened())
-		AfxMessageBox(L"打开资源失败!");
-	//获取视频总帧数
-	pic[2].totalFrameNumber = static_cast<long>(pic[2].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-	/*dlg3 = new CPictureDlg();
-	dlg3->Create(IDD__PICTURE_SHOW, CWnd::GetDesktopWindow());
-*/
-	while (close_thread3 == false)
-	{
-		if (pic[2].capture.read(pic[2].frame))	//循环读取视频的每一帧
-		{
-			if (pic[2].currentFrame <= pic[2].totalFrameNumber)
-			{
-				//在屏幕二上显示
-				dlg3->MoveWindow(rect[3].left, rect[3].top, rect[3].right, rect[3].bottom, true);
-				dlg3->showImage(pic[2].frame);
-				pic[2].currentFrame++;
-			}
-			else
-			{
-				break;
-			}
-			Sleep(1);
-		}
-		else
-			break;
-	}
-	return 0;
-}
-UINT ThreadProc4(LPVOID pM)
-{
-	//pic[3].capture.open(path4);
-	if (!pic[3].capture.isOpened())
-		AfxMessageBox(L"打开资源失败!");
-	//获取视频总帧数
-	pic[3].totalFrameNumber = static_cast<long>(pic[3].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-	/*dlg4 = new CPictureDlg();
-	dlg4->Create(IDD__PICTURE_SHOW, CWnd::GetDesktopWindow());*/
-
-	while (close_thread4 == false)
-	{
-		if (pic[3].capture.read(pic[3].frame))	//循环读取视频的每一帧
-		{
-			if (pic[3].currentFrame <= pic[3].totalFrameNumber)
-			{
-				//在屏幕二上显示
-				dlg4->MoveWindow(rect[4].left, rect[4].top, rect[4].right, rect[4].bottom, true);
-				dlg4->showImage(pic[3].frame);
-				pic[3].currentFrame++;
-			}
-			else
-			{
-				break;
-			}
-			Sleep(1);
-		}
-		else
-			break;
-	}
-	return 0;
-}
-
-
-//打开视频文件并设置定时器来定时调用OnTimer函数来播放视频
-bool CSplitScreenDlg::videoCapture(CString videoPath)
-{
-	if (click_picture == 1)
-	{
-	//	path1 = CW2A(videoPath.GetString());
-	//	pic[0].capture.open(path1);
-		if (!pic[0].capture.isOpened())
-			MessageBox(L"打开资源失败!");
-		//获取视频总帧数
-		pic[0].totalFrameNumber = static_cast<long>(pic[0].capture.get(CV_CAP_PROP_FRAME_COUNT));
-		if (NULL == dlg1)
-		{
-			dlg1 = new CPictureDlg();
-			dlg1->Create(IDD__PICTURE_SHOW, this);
-		}
-
-		//调用线程1
-		//CUiThread* pThread1 = new CUiThread();
-		//pThread1->path = path1;
-		//pThread1->rect.left = rect[1].left;
-		//pThread1->rect.top = rect[1].top;
-		//pThread1->rect.right = rect[1].right;
-		//pThread1->rect.bottom = rect[1].bottom;
-		//pThread1->CreateThread();
-		//int ret1 = PostThreadMessage(pThread1->m_nThreadID, WM_SPLASH_NOTIFY, 0, 0);
-		//if (ret1 == 0)    // :检查返回值,是否失败.
-		//{
-		//	AfxMessageBox(L"post thread msg error  1!");
-		//}
-		////调用线程2
-		//CUiThread* pThread2 = new CUiThread();
-		//pThread2->path = path1;
-		//pThread2->rect.left = rect[2].left;
-		//pThread2->rect.top = rect[2].top;
-		//pThread2->rect.right = rect[2].right;
-		//pThread2->rect.bottom = rect[2].bottom;
-		//pThread2->CreateThread();
-		//int ret2 = PostThreadMessage(pThread2->m_nThreadID, WM_SPLASH_NOTIFY, 0, 0);
-		//if (ret2 == 0)    // :检查返回值,是否失败.
-		//{
-		//	AfxMessageBox(L"post thread msg error  2!");
-		//}
-		////调用线程3
-		//CUiThread* pThread3 = new CUiThread();
-		//pThread3->path = path1;
-		//pThread3->rect.left = rect[3].left;
-		//pThread3->rect.top = rect[3].top;
-		//pThread3->rect.right = rect[3].right;
-		//pThread3->rect.bottom = rect[3].bottom;
-		//pThread3->CreateThread();
-		//int ret3 = PostThreadMessage(pThread3->m_nThreadID, WM_SPLASH_NOTIFY, 0, 0);
-		//if (ret3 == 0)    // :检查返回值,是否失败.
-		//{
-		//	AfxMessageBox(L"post thread msg error 3!");
-		//}
-		////调用线程4
-		//CUiThread* pThread4 = new CUiThread();
-		//pThread4->path = path1;
-		//pThread4->rect.left = rect[4].left;
-		//pThread4->rect.top = rect[4].top;
-		//pThread4->rect.right = rect[4].right;
-		//pThread4->rect.bottom = rect[4].bottom;
-		//pThread4->CreateThread();
-		//int ret4 = PostThreadMessage(pThread4->m_nThreadID, WM_SPLASH_NOTIFY, 0, 0);
-		//if (ret4 == 0)    // :检查返回值,是否失败.
-		//{
-		//	AfxMessageBox(L"post thread msg error  4!");
-		//}
-
-		//设置屏幕1的显示线程
-		/*CUiThread* pThread = (CUiThread*)AfxBeginThread(RUNTIME_CLASS(CUiThread), THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED, NULL);
-
-
-		pThread->ResumeThread();*/
-
-		//pThread->run();
-		//pic_pthread1 = AfxBeginThread(ThreadProc1, this);
-
-		//SetTimer(1, delay, NULL); //定时器，定时时间和帧率一致
-
-	}	
-	else if (click_picture == 2)
-	{
-		//path2 = CW2A(videoPath.GetString());
-
-		//pic[1].capture.open(path2);
-		if (!pic[1].capture.isOpened())
-			MessageBox(L"打开资源失败!");
-		//获取视频总帧数
-		pic[1].totalFrameNumber = static_cast<long>(pic[1].capture.get(CV_CAP_PROP_FRAME_COUNT));
-		if (NULL == dlg2)
-		{
-			dlg2 = new CPictureDlg();
-			dlg2->Create(IDD__PICTURE_SHOW, this);
-		}
-
-		/*CUiThread* pThread = new CUiThread();
-		pThread->path = path2;
-		pThread->rect.left = rect[2].left;
-		pThread->rect.top = rect[2].top;
-		pThread->rect.right = rect[2].right;
-		pThread->rect.bottom = rect[2].bottom;
-
-		pThread->CreateThread();*/
-
-		//设置屏幕2的显示线程
-		/*CUiThread* pThread = (CUiThread*)AfxBeginThread(RUNTIME_CLASS(CUiThread), THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED, NULL);
-		pThread->path = path2;
-		pThread->rect.left = rect[2].left;
-		pThread->rect.top = rect[2].top;
-		pThread->rect.right = rect[2].right;
-		pThread->rect.bottom = rect[2].bottom;
-
-		pThread->ResumeThread();*/
-		//pThread->run();
-
-	//	pic_pthread2 = AfxBeginThread(ThreadProc2, NULL);
-
-	//	SetTimer(2, delay, NULL); //定时器，定时时间和帧率一致
-	}
-	else if (click_picture == 3)
-	{
-		//path3 = CW2A(videoPath.GetString());
-
-		//pic[2].capture.open(path3);
-		if (!pic[2].capture.isOpened())
-			MessageBox(L"打开资源失败!");
-		//获取视频总帧数
-		pic[2].totalFrameNumber = static_cast<long>(pic[2].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-		if (NULL == dlg3)
-		{
-			dlg3 = new CPictureDlg();
-			dlg3->Create(IDD__PICTURE_SHOW, this);
-		}
-
-	/*	CUiThread* pThread = new CUiThread();
-		pThread->path = path3;
-		pThread->rect.left = rect[3].left;
-		pThread->rect.top = rect[3].top;
-		pThread->rect.right = rect[3].right;
-		pThread->rect.bottom = rect[3].bottom;
-
-		pThread->CreateThread();*/
-
-		//CUiThread* pThread = (CUiThread*)AfxBeginThread(RUNTIME_CLASS(CUiThread), THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED, NULL);
-		//pThread->path = path3;
-		//pThread->rect.left = rect[3].left;
-		//pThread->rect.top = rect[3].top;
-		//pThread->rect.right = rect[3].right;
-		//pThread->rect.bottom = rect[3].bottom;
-
-		//pThread->ResumeThread();
-		//pThread->run();
-
-	//	pic_pthread3 = AfxBeginThread(ThreadProc3, NULL);
-
-	//	SetTimer(3, delay, NULL); //定时器，定时时间和帧率一致
-	}
-	else if (click_picture == 4)
-	{
-		//path4 = CW2A(videoPath.GetString());
-
-		//pic[3].capture.open(path4);
-		if (!pic[3].capture.isOpened())
-			MessageBox(L"打开资源失败!");
-		//获取视频总帧数
-		pic[3].totalFrameNumber = static_cast<long>(pic[3].capture.get(CV_CAP_PROP_FRAME_COUNT));
-
-		if (NULL == dlg4)
-		{
-			dlg4 = new CPictureDlg();
-			dlg4->Create(IDD__PICTURE_SHOW, this);
-		}
-		/*CUiThread* pThread = new CUiThread();
-		pThread->path = path4;
-		pThread->rect.left = rect[4].left;
-		pThread->rect.top = rect[4].top;
-		pThread->rect.right = rect[4].right;
-		pThread->rect.bottom = rect[4].bottom;
-
-		pThread->CreateThread();
-*/
-		/*CUiThread* pThread = (CUiThread*)AfxBeginThread(RUNTIME_CLASS(CUiThread), THREAD_PRIORITY_NORMAL, 0, CREATE_SUSPENDED, NULL);
-		pThread->path = path4;
-		pThread->rect.left = rect[4].left;
-		pThread->rect.top = rect[4].top;
-		pThread->rect.right = rect[4].right;
-		pThread->rect.bottom = rect[4].bottom;
-
-		pThread->ResumeThread();*/
-		//pThread->run();
-	//	pic_pthread4 = AfxBeginThread(ThreadProc4, NULL);
-
-		//SetTimer(4, delay, NULL); //定时器，定时时间和帧率一致
-	}
-	return 0;
-}
 
 void CSplitScreenDlg::OnBnClickedSyn()
 {
@@ -1048,7 +781,7 @@ void CSplitScreenDlg::OnBnClickedSyn()
 		dlg2->Create(IDD__PICTURE_SHOW, this);
 		dlg3->Create(IDD__PICTURE_SHOW, this);
 		dlg4->Create(IDD__PICTURE_SHOW, this);
-		SetTimer(5, delay, NULL);			//用于响应同步的定时器，定时时间和帧率一致
+		SetTimer(5, delay, NULL);				//用于响应同步的定时器，定时时间和帧率一致
 
 	}
 	else
@@ -1059,157 +792,8 @@ void CSplitScreenDlg::OnBnClickedSyn()
 //定时播放视频
 void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 {
-	//屏幕一的定时器
-	if (1 == nIDEvent)
-	{
-		if (pic[0].capture.read(pic[0].frame))	//循环读取视频的每一帧
-		{
-			if (pic[0].currentFrame <= pic[0].totalFrameNumber)
-			{
-				//在屏幕一上显示
-				dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
-				dlg1->showImage(pic[0].frame);
-
-				//在第一个图片缩略框中显示
-				CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				HDC hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect;
-				GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区    
-
-				IplImage iplImg = IplImage(pic[0].frame);
-				CvvImage cvvImg;											//创建一个CvvImage对象  
-				cvvImg.CopyOf(&iplImg);
-				cvvImg.DrawToHDC(hDC, &rect);
-				cvvImg.Destroy();
-				ReleaseDC(pDC);
-				//双击了缩略图1则放大缩略图1
-				if (pic[0].isOpenAndDBClick == true && expanse1->openExpanseDlg == true)
-				{
-					expanse1->showImage(pic[0].frame);
-				}
-				pic[0].currentFrame++;
-			}
-		}
-		else
-		{
-
-		}
-	}
-	//屏幕二的定时器
-	else if (2 == nIDEvent)
-	{
-		if (pic[1].capture.read(pic[1].frame))	//循环读取视频的每一帧
-		{
-			if (pic[1].currentFrame <= pic[1].totalFrameNumber)
-			{
-				//在屏幕二上显示
-				dlg2->MoveWindow(rect[2].left, rect[2].top, rect[2].right, rect[2].bottom, true);
-				dlg2->showImage(pic[1].frame);
-
-
-				//在第二个图片缩略框中显示图片
-				CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				HDC hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect;
-				GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE2控件的显示区    
-
-				IplImage iplImg = IplImage(pic[1].frame);
-				CvvImage cvvImg;											//创建一个CvvImage对象  
-				cvvImg.CopyOf(&iplImg);
-				cvvImg.DrawToHDC(hDC, &rect);
-				cvvImg.Destroy();
-				ReleaseDC(pDC);
-				//双击了缩略图2则放大缩略图2
-				if (pic[1].isOpenAndDBClick == true && expanse2->openExpanseDlg == true)
-				{
-					expanse2->showImage(pic[1].frame);
-				}
-				pic[1].currentFrame++;
-			}
-		}
-		else
-		{
-
-		}
-	}
-	//屏幕三的定时器
-	else if (3 == nIDEvent)
-	{
-		if (pic[2].capture.read(pic[2].frame))	//循环读取视频的每一帧
-		{
-			if (pic[2].currentFrame <= pic[2].totalFrameNumber)
-			{
-				//在屏幕三上显示
-				dlg3->MoveWindow(rect[3].left, rect[3].top, rect[3].right, rect[3].bottom, true);
-				dlg3->showImage(pic[2].frame);
-
-
-				//在第三个图片缩略框中显示图片
-				CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				HDC hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect;
-				GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE3控件的显示区    
-
-				IplImage iplImg = IplImage(pic[2].frame);
-				CvvImage cvvImg;											//创建一个CvvImage对象  
-				cvvImg.CopyOf(&iplImg);
-				cvvImg.DrawToHDC(hDC, &rect);
-				cvvImg.Destroy();
-				ReleaseDC(pDC);
-				//双击了缩略图3则放大缩略图3
-				if (pic[2].isOpenAndDBClick == true && expanse3->openExpanseDlg == true)
-				{
-					expanse3->showImage(pic[2].frame);
-				}
-				pic[2].currentFrame++;
-			}
-		}
-		else
-		{
-
-		}
-	}
-	//屏幕四的定时器
-	else if (4 == nIDEvent)
-	{
-		if (pic[3].capture.read(pic[3].frame))		//循环读取视频的每一帧
-		{
-			if (pic[3].currentFrame <= pic[3].totalFrameNumber)
-			{
-				//在屏幕四上显示
-				dlg4->MoveWindow(rect[4].left, rect[4].top, rect[4].right, rect[4].bottom, true);
-				dlg4->showImage(pic[3].frame);
-
-
-				//在第四个图片缩略框中显示图片
-				CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				HDC hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect;
-				GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE4控件的显示区    
-
-				IplImage iplImg = IplImage(pic[3].frame);
-				CvvImage cvvImg;											//创建一个CvvImage对象  
-				cvvImg.CopyOf(&iplImg);
-				cvvImg.DrawToHDC(hDC, &rect);
-				cvvImg.Destroy();
-				ReleaseDC(pDC);
-				//双击了缩略图4则放大缩略图4
-				if (pic[3].isOpenAndDBClick == true && expanse4->openExpanseDlg == true)
-				{
-					expanse4->showImage(pic[3].frame);
-				}
-				pic[3].currentFrame++;
-			}
-		}
-		else
-		{
-
-		}
-	}
-
-
 	//一键同步拼接显示
-	else if (5 == nIDEvent)
+	if (5 == nIDEvent)
 	{
 		if (syn_capture.read(syn_frame))		//循环读取视频的每一帧
 		{
@@ -1219,8 +803,6 @@ void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 				imageROI2 = syn_frame(Range(0, syn_frame.rows / 2), Range((syn_frame.cols / 2) + 1, syn_frame.cols));
 				imageROI3 = syn_frame(Range((syn_frame.rows / 2) + 1, syn_frame.rows), Range(0, syn_frame.cols / 2));
 				imageROI4 = syn_frame(Range((syn_frame.rows / 2) + 1, syn_frame.rows), Range((syn_frame.cols / 2) + 1, syn_frame.cols));
-
-
 
 				dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
 				dlg1->showImage(imageROI1);
@@ -1244,8 +826,6 @@ void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 				cvvImg1.Destroy();
 				ReleaseDC(pDC);
 
-
-
 				pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
 				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
 				CRect rect2;
@@ -1257,8 +837,6 @@ void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 				cvvImg2.DrawToHDC(hDC, &rect2);
 				cvvImg2.Destroy();
 				ReleaseDC(pDC);
-
-
 
 				pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
 				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
@@ -1272,8 +850,6 @@ void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 				cvvImg3.Destroy();
 				ReleaseDC(pDC);
 
-
-
 				pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
 				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
 				CRect rect4;
@@ -1285,45 +861,26 @@ void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
 				cvvImg4.DrawToHDC(hDC, &rect4);
 				cvvImg4.Destroy();
 				ReleaseDC(pDC);
-
-				////双击了缩略图4则放大缩略图4
-				//if (pic[3].isOpenAndDBClick == true && expanse4->openExpanseDlg == true)
-				//{
-				//	expanse4->showImage(pic[3].frame);
-				//}
-
 				currentframe++;
 			}
-		}
-		else
-		{
-
 		}
 	}
 	CDialogEx::OnTimer(nIDEvent);
 }
 
-
-
-
-
-
-
-void CSplitScreenDlg::OnBnClickedCancel()
-{
-	CDialogEx::OnCancel();
-}
-
+//关闭屏幕1
 void CSplitScreenDlg::OnBnClickedClose1()
 {
 	if (dlg1 != NULL)
 	{
+		close_thread1 = true;
+		Sleep(100);
+
 		dlg1->CloseWindow();
-		KillTimer(1);
 		delete dlg1;
+		dlg1 = NULL;
 		pic[0].capture.release();
 		pic[0].isOpen = false;
-		pic[0].isOpenAndDBClick = false;
 		pic[0].video_play = false;
 
 		CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
@@ -1332,23 +889,23 @@ void CSplitScreenDlg::OnBnClickedClose1()
 		GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		  //获取IDC_SMALL_PICTURE1控件的显示区   
 
 		COLORREF clrBack = pDC->GetBkColor();
-
 		CBrush br(clrBack);
 		pDC->FillRect(rect, &br);
 	}
 }
-
-
+//关闭屏幕2
 void CSplitScreenDlg::OnBnClickedClose2()
 {
 	if (dlg2 != NULL)
 	{
+		close_thread2 = true;
+		Sleep(100);
+
 		dlg2->CloseWindow();
-		KillTimer(2);
+		delete dlg2;
 		dlg2 = NULL;
 		pic[1].capture.release();
 		pic[1].isOpen = false;
-		pic[1].isOpenAndDBClick = false;
 		pic[1].video_play = false;
 
 		CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
@@ -1357,23 +914,23 @@ void CSplitScreenDlg::OnBnClickedClose2()
 		GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
 		COLORREF clrBack = pDC->GetBkColor();
-
 		CBrush br(clrBack);
 		pDC->FillRect(rect, &br);
 	}
 }
-
-
+//关闭屏幕3
 void CSplitScreenDlg::OnBnClickedClose3()
 {
 	if (dlg3 != NULL)
 	{
+		close_thread3 = true;
+		Sleep(100);
+
 		dlg3->CloseWindow();
-		KillTimer(3);
+		delete dlg3;
 		dlg3 = NULL;
 		pic[2].capture.release();
 		pic[2].isOpen = false;
-		pic[2].isOpenAndDBClick = false;
 		pic[2].video_play = false;
 
 		CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
@@ -1382,23 +939,23 @@ void CSplitScreenDlg::OnBnClickedClose3()
 		GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
 		COLORREF clrBack = pDC->GetBkColor();
-
 		CBrush br(clrBack);
 		pDC->FillRect(rect, &br);
 	}
 }
-
-
+//关闭屏幕4
 void CSplitScreenDlg::OnBnClickedClose4()
 {
 	if (dlg4 != NULL)
 	{
+		close_thread4 = true;
+		Sleep(100);
+
 		dlg4->CloseWindow();
-		KillTimer(4);
+		delete dlg4;
 		dlg4 = NULL;
 		pic[3].capture.release();
 		pic[3].isOpen = false;
-		pic[3].isOpenAndDBClick = false;
 		pic[3].video_play = false;
 
 		CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
@@ -1407,19 +964,83 @@ void CSplitScreenDlg::OnBnClickedClose4()
 		GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
 		COLORREF clrBack = pDC->GetBkColor();
-
 		CBrush br(clrBack);
 		pDC->FillRect(rect, &br);
 	}
 }
 
+//点击退出按钮
+void CSplitScreenDlg::OnBnClickedCancel()
+{
+	close_thread1 = true;
+	close_thread2 = true;
+	close_thread3 = true;
+	close_thread4 = true;
 
+	Sleep(200);			//等待200ms后才关闭资源，目的是让子线程有充足的时间去退出并释放资源
 
+	if (dlg1 != NULL)
+	{
+		delete dlg1;
+		dlg1 = NULL;
+	}
+	if (dlg2 != NULL)
+	{
+		delete dlg2;
+		dlg2 = NULL;
+	}
+	if (dlg3 != NULL)
+	{
+		delete dlg3;
+		dlg3 = NULL;
+	}
+	if (dlg4 != NULL)
+	{
+		delete dlg4;
+		dlg4 = NULL;
+	}
+	if (pt != NULL)
+	{
+		delete[] pt;
+		pt = NULL;
+	}
+	CDialogEx::OnCancel();							//关闭当前窗口
+	AfxGetMainWnd()->SendMessage(WM_CLOSE);			//关闭主界面窗口
+}
+//点击右上角关闭按钮
 void CSplitScreenDlg::OnClose()
 {
 	close_thread1 = true;
 	close_thread2 = true;
 	close_thread3 = true;
 	close_thread4 = true;
-	CDialogEx::OnClose();
+	Sleep(200);			//等待200ms后才关闭资源，目的是让子线程有充足的时间去退出并释放资源
+
+	if (dlg1 != NULL)
+	{
+		delete dlg1;
+		dlg1 = NULL;
+	}
+	if (dlg2 != NULL)
+	{
+		delete dlg2;
+		dlg2 = NULL;
+	}
+	if (dlg3 != NULL)
+	{
+		delete dlg3;
+		dlg3 = NULL;
+	}
+	if (dlg4 != NULL)
+	{
+		delete dlg4;
+		dlg4 = NULL;
+	}
+	if (pt != NULL)
+	{
+		delete[] pt;
+		pt = NULL;
+	}
+	CDialogEx::OnClose();						//关闭当前窗口
+	AfxGetMainWnd()->SendMessage(WM_CLOSE);		//关闭主界面窗口
 }

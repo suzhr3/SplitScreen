@@ -20,9 +20,14 @@ public:
 	CPictureDlg(CWnd* pParent = NULL);   // 标准构造函数
 	virtual ~CPictureDlg();
 
-	void showImage(Mat& image);			//在图片控件上显示图片image
+	//在图片控件上显示图片image
+	void showImage(Mat& image);			
+	//在缩略图控件上显示图片frame
+	void ShowSmallPic(CDC* pDC, Mat frame, CRect rect);
+
 	CRect m_rect;						//记录当前对话框的大小
 	void ChangeSize(CWnd *pWnd, int cx, int cy);
+
 
 	bool openExpanseDlg;
 

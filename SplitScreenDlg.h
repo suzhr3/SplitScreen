@@ -6,6 +6,7 @@
 
 using namespace std;
 
+//四个线程函数
 UINT ThreadProc1(LPVOID pM);
 UINT ThreadProc2(LPVOID pM);
 UINT ThreadProc3(LPVOID pM);
@@ -28,15 +29,16 @@ protected:
 
 public:
 
-	bool videoCapture(CString videoPath);	
-
-
 	CUiThread* pThread1;
 	CUiThread* pThread2;
 	CUiThread* pThread3;
 	CUiThread* pThread4;
 
-
+	//四个工作者线程
+	CWinThread* pic_pthread1;
+	CWinThread* pic_pthread2;
+	CWinThread* pic_pthread3;
+	CWinThread* pic_pthread4;
 
 // 实现
 protected:
