@@ -34,6 +34,13 @@ BEGIN_MESSAGE_MAP(CPictureDlg, CDialogEx)
 END_MESSAGE_MAP()
 
 
+BOOL CPictureDlg::OnInitDialog()
+{
+	GetClientRect(&m_rect);  //获取对话框的大小
+
+	return TRUE;  // return TRUE  unless you set the focus to a control
+}
+
 // CPictureDlg 消息处理程序
 void CPictureDlg::showImage(Mat& image)
 {
@@ -60,7 +67,7 @@ void CPictureDlg::showImage(Mat& image)
 	if (is_resize == true)
 	{
 		//将原图像resize为要显示的客户区的分辨率大小，这里使用的是内插值的方法
-		resize(image, newImg, Size(winRect.Width(), winRect.Height()), 0, 0, CV_INTER_LINEAR);
+		resize(image, newImg, Size(winRect.Width(), winRect.Height()), 0, 0, INTER_CUBIC);
 		iplImg = IplImage(image);
 	}
 	else
@@ -79,10 +86,10 @@ void CPictureDlg::showImage(Mat& image)
 void CPictureDlg::ShowSmallPic(CDC* pDC, Mat frame, CRect rect)
 {
 	HDC hDC = pDC->GetSafeHdc();							 // 获取设备上下文句柄  	
-															 //resize后的frame
+	//resize后的frame
 	Mat newImg;
 	//将原图像resize为要显示的客户区（这里是缩略框的大小）的分辨率大小，这里使用的是内插值的方法
-	resize(frame, newImg, Size(rect.Width(), rect.Height()), 0, 0, CV_INTER_LINEAR);
+	resize(frame, newImg, Size(rect.Width(), rect.Height()), 0, 0, INTER_CUBIC);
 
 	IplImage iplImg = IplImage(newImg);
 	CvvImage cvvImg;										//创建一个CvvImage对象  
@@ -106,18 +113,20 @@ void CPictureDlg::ChangeSize(CWnd *pWnd, int cx, int cy)
 		rect.bottom = rect.bottom * cy / m_rect.Height();
 		pWnd->MoveWindow(rect);//设置控件大小  
 	}
+
 }
 
 void CPictureDlg::OnSize(UINT nType, int cx, int cy)
 {
-	if (nType == 1) return;//最小化则什么都不做 
+	CDialogEx::OnSize(nType, cx, cy);
+
+	if (nType == SIZE_MINIMIZED) return;//最小化则什么都不做 
 
 	CWnd *pWnd;
 	pWnd = GetDlgItem(IDC_PICTURE_SHOW);
 	ChangeSize(pWnd, cx, cy);
-	GetClientRect(&m_rect);// 将变化后的对话框大小设为旧大小   
 
-	CDialogEx::OnSize(nType, cx, cy);
+	GetClientRect(&m_rect);// 将变化后的对话框大小设为旧大小   
 }
 
 void CPictureDlg::OnClose()

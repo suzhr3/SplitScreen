@@ -46,16 +46,6 @@ int total_num_of_screen = GetSystemMetrics(SM_CMONITORS);		//总屏幕数
 int num_without_PrimaryScreen = total_num_of_screen - 1;		//副屏个数
 CRect * rect = new CRect[total_num_of_screen];					//存储屏幕的信息									
 
-//用于同步用
-CString syn_videoPath;
-VideoCapture syn_capture;
-long totalframe;
-long currentframe = 0;
-Mat syn_frame;
-Mat imageROI1, imageROI2, imageROI3, imageROI4;
-bool syn_isOpen = false;
-bool syn_isOpenAndDBClick = false;
-bool syn_video_play = false;
 
 CPictureDlg* expanse1 = NULL;			//点击4个缩略图对象之后弹出的4个全屏对话框
 CPictureDlg* expanse2 = NULL;
@@ -117,7 +107,6 @@ BEGIN_MESSAGE_MAP(CSplitScreenDlg, CDialogEx)
 	ON_WM_SYSCOMMAND()
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
-	ON_WM_TIMER()
 	ON_STN_DBLCLK(IDC_SMALL_PICTURE1, &CSplitScreenDlg::OnStnDblclickSmallPicture1)
 	ON_STN_DBLCLK(IDC_SMALL_PICTURE2, &CSplitScreenDlg::OnStnDblclickSmallPicture2)
 	ON_STN_DBLCLK(IDC_SMALL_PICTURE3, &CSplitScreenDlg::OnStnDblclickSmallPicture3)
@@ -131,8 +120,16 @@ BEGIN_MESSAGE_MAP(CSplitScreenDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_CLOSE2, &CSplitScreenDlg::OnBnClickedClose2)
 	ON_BN_CLICKED(IDC_CLOSE3, &CSplitScreenDlg::OnBnClickedClose3)
 	ON_BN_CLICKED(IDC_CLOSE4, &CSplitScreenDlg::OnBnClickedClose4)
-	ON_BN_CLICKED(IDC_SYN, &CSplitScreenDlg::OnBnClickedSyn)
 	ON_WM_CLOSE()
+	ON_NOTIFY(NM_CLICK, IDC_RETURN, &CSplitScreenDlg::OnNMClickSyslink1)
+	ON_BN_CLICKED(IDC_IMPORT1, &CSplitScreenDlg::OnBnClickedImport1)
+	ON_BN_CLICKED(IDC_IMPORT2, &CSplitScreenDlg::OnBnClickedImport2)
+	ON_BN_CLICKED(IDC_IMPORT3, &CSplitScreenDlg::OnBnClickedImport3)
+	ON_BN_CLICKED(IDC_IMPORT4, &CSplitScreenDlg::OnBnClickedImport4)
+	ON_BN_CLICKED(IDC_STOP2, &CSplitScreenDlg::OnBnClickedStop2)
+	ON_BN_CLICKED(IDC_STOP1, &CSplitScreenDlg::OnBnClickedStop1)
+	ON_BN_CLICKED(IDC_STOP3, &CSplitScreenDlg::OnBnClickedStop3)
+	ON_BN_CLICKED(IDC_STOP4, &CSplitScreenDlg::OnBnClickedStop4)
 END_MESSAGE_MAP()
 
 
@@ -295,6 +292,7 @@ UINT ThreadProc1(LPVOID pM)
 	//获取视频总帧数
 	pic[0].totalFrameNumber = static_cast<long>(pic[0].capture.get(CV_CAP_PROP_FRAME_COUNT));
 	dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
+
 	while (1)
 	{
 		if (pic[0].capture.read(pic[0].frame))	//循环读取视频的每一帧
@@ -330,6 +328,7 @@ UINT ThreadProc2(LPVOID pM)
 	//获取视频总帧数
 	pic[1].totalFrameNumber = static_cast<long>(pic[1].capture.get(CV_CAP_PROP_FRAME_COUNT));
 	dlg2->MoveWindow(rect[2].left, rect[2].top, rect[2].right, rect[2].bottom, true);
+
 	while (close_thread2 == false)
 	{
 		if (pic[1].capture.read(pic[1].frame))	//循环读取视频的每一帧
@@ -399,7 +398,7 @@ UINT ThreadProc4(LPVOID pM)
 		AfxMessageBox(L"打开资源失败!");
 	//获取视频总帧数
 	pic[3].totalFrameNumber = static_cast<long>(pic[3].capture.get(CV_CAP_PROP_FRAME_COUNT));
-	dlg4->MoveWindow(rect[0].left, rect[0].top, rect[0].right, rect[0].bottom, true);
+	dlg4->MoveWindow(rect[4].left, rect[4].top, rect[4].right, rect[4].bottom, true);
 
 	while (close_thread4 == false)
 	{
@@ -447,36 +446,11 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture1()
 		expanse1->openExpanseDlg = true;
 	}
 	//如果缩略图1没有在播放视频，则双击它之后会提示用户导入资源
-	else if (num_without_PrimaryScreen >= 1 && pic[0].isOpen == false)
-	{
-		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
-		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-		if (filedlg.DoModal() == IDOK)
-		{
-			if (NULL == dlg1)
-			{
-				dlg1 = new CPictureDlg();
-				dlg1->Create(IDD__PICTURE_SHOW, this);
-			}
-			CString cpath = filedlg.GetPathName();
-			pic[0].videoPath = CW2A(cpath.GetString());					//获取屏幕1的视频播放路径
-			pic[0].isOpen = true;										//屏幕1打开了
-		    pic[0].video_play = true;									//屏幕1正在播放
-
-			//获取主窗口上第1个缩略图的相关句柄和指针
-			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();         //获得缩略图1上控件的窗口指针，再获取与该窗口关联的上下文指针 
-			CRect rect;
-			GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		//获取缩略图1上控件的显示区 
-			pt[0].pDC = pDC;
-			pt[0].rect = rect;
-
-			pic_pthread1 = AfxBeginThread(ThreadProc1, &pt[0]);			//启动线程1来播放视频1
-		}
-	}
 	else
-		MessageBox(L"未检测到显示器1", L"报告");
+	{
+		OnBnClickedImport1();
+	}
 }
-
 //在缩略图2上双击
 void CSplitScreenDlg::OnStnDblclickSmallPicture2()
 {
@@ -496,37 +470,11 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture2()
 		SetWindowLong(expanse2->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse2->m_hWnd, GWL_STYLE) + WS_CAPTION);
 		expanse2->openExpanseDlg = true;
 	}
-	//如果缩略图2没有在播放视频，则双击它之后会提示用户导入资源
-	else if (num_without_PrimaryScreen >= 2 && pic[1].isOpen == false)
-	{
-		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
-		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-		if (filedlg.DoModal() == IDOK)
-		{
-			if (NULL == dlg2)
-			{
-				dlg2 = new CPictureDlg();
-				dlg2->Create(IDD__PICTURE_SHOW, this);
-			}
-			CString cpath = filedlg.GetPathName();
-			pic[1].videoPath = CW2A(cpath.GetString());					//获取屏幕2的视频播放路径
-			pic[1].isOpen = true;										//屏幕2打开了
-			pic[1].video_play = true;									//屏幕2正在播放
-
-			//获取主窗口上第2个缩略图的相关句柄和指针
-			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();         //获得缩略图2上控件的窗口指针，再获取与该窗口关联的上下文指针 
-			CRect rect;
-			GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取缩略图2上控件的显示区 
-			pt[1].pDC = pDC;
-			pt[1].rect = rect;
-
-			pic_pthread2 = AfxBeginThread(ThreadProc2, &pt[1]);			//启动线程2来播放视频2
-		}
-	}
 	else
-		MessageBox(L"未检测到显示器2", L"报告");
+	{
+		OnBnClickedImport2();
+	}
 }
-
 //在缩略图3上双击
 void CSplitScreenDlg::OnStnDblclickSmallPicture3()
 {
@@ -546,37 +494,11 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture3()
 		SetWindowLong(expanse3->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse3->m_hWnd, GWL_STYLE) + WS_CAPTION);
 		expanse3->openExpanseDlg = true;
 	}
-	//如果缩略图3没有在播放视频，则双击它之后会提示用户导入资源
-	else if (num_without_PrimaryScreen >= 3 && pic[2].isOpen == false)
-	{
-		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
-		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-		if (filedlg.DoModal() == IDOK)
-		{		
-			if (NULL == dlg3)
-			{
-				dlg3 = new CPictureDlg();
-				dlg3->Create(IDD__PICTURE_SHOW, this);
-			}
-			CString cpath = filedlg.GetPathName();
-			pic[2].videoPath = CW2A(cpath.GetString());					//获取屏幕3的视频播放路径
-			pic[2].isOpen = true;										//屏幕3打开了
-			pic[2].video_play = true;									//屏幕3正在播放
-
-			//获取主窗口上第3个缩略图的相关句柄和指针
-			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();         //获得缩略图3上控件的窗口指针，再获取与该窗口关联的上下文指针 
-			CRect rect;
-			GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取缩略图3上控件的显示区 
-			pt[2].pDC = pDC;
-			pt[2].rect = rect;
-
-			pic_pthread3 = AfxBeginThread(ThreadProc3, &pt[2]);			//启动线程3来播放视频3
-		}
-	}
 	else
-		MessageBox(L"未检测到显示器3", L"报告");
+	{
+		OnBnClickedImport3();
+	}
 }
-
 //在缩略图4上双击
 void CSplitScreenDlg::OnStnDblclickSmallPicture4()
 {
@@ -596,36 +518,13 @@ void CSplitScreenDlg::OnStnDblclickSmallPicture4()
 		SetWindowLong(expanse4->GetSafeHwnd(), GWL_STYLE, GetWindowLong(expanse4->m_hWnd, GWL_STYLE) + WS_CAPTION);
 		expanse4->openExpanseDlg = true;
 	}
-	//如果缩略图4没有在播放视频，则双击它之后会提示用户导入资源
-	else if (num_without_PrimaryScreen >= 4 && pic[3].isOpen == false)
-	{
-		CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
-		CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-		if (filedlg.DoModal() == IDOK)
-		{
-			if (NULL == dlg4)
-			{
-				dlg4 = new CPictureDlg();
-				dlg4->Create(IDD__PICTURE_SHOW, this);
-			}
-			CString cpath = filedlg.GetPathName();
-			pic[3].videoPath = CW2A(cpath.GetString());					//获取屏幕4的视频播放路径
-			pic[3].isOpen = true;										//屏幕4打开了
-			pic[3].video_play = true;									//屏幕4正在播放
-
-			//获取主窗口上第4个缩略图的相关句柄和指针
-			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();         //获得缩略图4上控件的窗口指针，再获取与该窗口关联的上下文指针 
-			CRect rect;
-			GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取缩略图4上控件的显示区 
-			pt[3].pDC = pDC;
-			pt[3].rect = rect;
-
-			pic_pthread4 = AfxBeginThread(ThreadProc4, &pt[3]);			//启动线程4来播放视频4
-		}
-	}
 	else
-		MessageBox(L"未检测到显示器4", L"报告");
+	{
+		OnBnClickedImport4();
+	}
 }
+
+
 
 //在缩略图1上单击
 void CSplitScreenDlg::OnStnClickedSmallPicture1()
@@ -646,18 +545,8 @@ void CSplitScreenDlg::OnStnClickedSmallPicture1()
 			break;
 	}
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
-	if (pic[0].isOpen == true && pic[0].video_play == true)
-	{
-		pic_pthread1->SuspendThread();				//单击暂停
-		pic[0].video_play = false;
-	}
-	else if (pic[0].isOpen == true && pic[0].video_play == false)
-	{
-		pic_pthread1->ResumeThread();				//单击继续播放
-		pic[0].video_play = true;
-	}
+	OnBnClickedStop2();
 }
-
 //在缩略图2上单击
 void CSplitScreenDlg::OnStnClickedSmallPicture2()
 {
@@ -677,18 +566,8 @@ void CSplitScreenDlg::OnStnClickedSmallPicture2()
 			break;
 	}
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
-	if (pic[1].isOpen == true && pic[1].video_play == true)
-	{
-		pic_pthread2->SuspendThread();					//单击暂停
-		pic[1].video_play = false;
-	}
-	else if (pic[1].isOpen == true && pic[1].video_play == false)
-	{
-		pic_pthread2->ResumeThread();	//单击继续播放
-		pic[1].video_play = true;
-	}
+	OnBnClickedStop1();
 }
-
 //在缩略图3上单击
 void CSplitScreenDlg::OnStnClickedSmallPicture3()
 {
@@ -708,18 +587,8 @@ void CSplitScreenDlg::OnStnClickedSmallPicture3()
 			break;
 	}
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
-	if (pic[2].isOpen == true && pic[2].video_play == true)
-	{
-		pic_pthread3->SuspendThread();				//单击暂停
-		pic[2].video_play = false;
-	}
-	else if (pic[2].isOpen == true && pic[2].video_play == false)
-	{
-		pic_pthread3->ResumeThread();	//单击继续播放
-		pic[2].video_play = true;
-	}
+	OnBnClickedStop3();
 }
-
 //在缩略图4上单击
 void CSplitScreenDlg::OnStnClickedSmallPicture4()
 {
@@ -739,134 +608,248 @@ void CSplitScreenDlg::OnStnClickedSmallPicture4()
 			break;
 	}
 	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
+	OnBnClickedStop4();
+}
+
+
+
+//点击导入视频1按钮
+void CSplitScreenDlg::OnBnClickedImport1()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
+	CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
+	if (filedlg.DoModal() == IDOK)
+	{
+		if (num_without_PrimaryScreen >= 1 && pic[0].isOpen == false)
+		{
+			if (NULL == dlg1)
+			{
+				dlg1 = new CPictureDlg();
+				dlg1->Create(IDD__PICTURE_SHOW, this);
+			}
+			CString cpath = filedlg.GetPathName();
+			pic[0].videoPath = CW2A(cpath.GetString());					//获取屏幕1的视频播放路径
+			pic[0].isOpen = true;										//屏幕1打开了
+			pic[0].video_play = true;									//屏幕1正在播放
+
+																		//获取主窗口上第1个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();         //获得缩略图1上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		//获取缩略图1上控件的显示区 
+			pt[0].pDC = pDC;
+			pt[0].rect = rect;
+
+			close_thread1 = false;
+			pic_pthread1 = AfxBeginThread(ThreadProc1, &pt[0]);			//启动线程1来播放视频1
+
+			CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT1);
+			if (pBtn != NULL)
+			{
+				pBtn->EnableWindow(FALSE);
+			}
+		}
+		else
+			MessageBox(L"未检测到显示器1", L"报告");
+	}
+}
+//点击导入视频2按钮
+void CSplitScreenDlg::OnBnClickedImport2()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
+	CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
+	if (filedlg.DoModal() == IDOK)
+	{
+		if (num_without_PrimaryScreen >= 2 && pic[1].isOpen == false)
+		{
+			if (NULL == dlg2)
+			{
+				dlg2 = new CPictureDlg();
+				dlg2->Create(IDD__PICTURE_SHOW, this);
+			}
+			CString cpath = filedlg.GetPathName();
+			pic[1].videoPath = CW2A(cpath.GetString());					//获取屏幕2的视频播放路径
+			pic[1].isOpen = true;										//屏幕2打开了
+			pic[1].video_play = true;									//屏幕2正在播放
+
+																		//获取主窗口上第2个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();         //获得缩略图2上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取缩略图2上控件的显示区 
+			pt[1].pDC = pDC;
+			pt[1].rect = rect;
+
+			close_thread2 = false;
+			pic_pthread2 = AfxBeginThread(ThreadProc2, &pt[1]);			//启动线程2来播放视频2
+
+			CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT2);
+			if (pBtn != NULL)
+			{
+				pBtn->EnableWindow(FALSE);
+			}
+		}
+		else
+			MessageBox(L"未检测到显示器2", L"报告");
+	}
+}
+//点击导入视频3按钮
+void CSplitScreenDlg::OnBnClickedImport3()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
+	CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
+	if (filedlg.DoModal() == IDOK)
+	{
+		if (num_without_PrimaryScreen >= 3 && pic[2].isOpen == false)
+		{
+			if (NULL == dlg3)
+			{
+				dlg3 = new CPictureDlg();
+				dlg3->Create(IDD__PICTURE_SHOW, this);
+			}
+			CString cpath = filedlg.GetPathName();
+			pic[2].videoPath = CW2A(cpath.GetString());					//获取屏幕3的视频播放路径
+			pic[2].isOpen = true;										//屏幕3打开了
+			pic[2].video_play = true;									//屏幕3正在播放
+
+																		//获取主窗口上第3个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();         //获得缩略图3上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取缩略图3上控件的显示区 
+			pt[2].pDC = pDC;
+			pt[2].rect = rect;
+
+			close_thread3 = false;
+			pic_pthread3 = AfxBeginThread(ThreadProc3, &pt[2]);			//启动线程3来播放视频3
+			CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT3);
+			if (pBtn != NULL)
+			{
+				pBtn->EnableWindow(FALSE);
+			}
+		}
+		else
+			MessageBox(L"未检测到显示器3", L"报告");
+	}
+}
+//点击导入视频4按钮
+void CSplitScreenDlg::OnBnClickedImport4()
+{
+	// TODO: 在此添加控件通知处理程序代码
+
+	CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
+	CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
+	if (filedlg.DoModal() == IDOK)
+	{
+		if (num_without_PrimaryScreen >= 4 && pic[3].isOpen == false)
+		{
+			if (NULL == dlg4)
+			{
+				dlg4 = new CPictureDlg();
+				dlg4->Create(IDD__PICTURE_SHOW, this);
+			}
+			CString cpath = filedlg.GetPathName();
+			pic[3].videoPath = CW2A(cpath.GetString());					//获取屏幕4的视频播放路径
+			pic[3].isOpen = true;										//屏幕4打开了
+			pic[3].video_play = true;									//屏幕4正在播放
+
+																		//获取主窗口上第4个缩略图的相关句柄和指针
+			CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();         //获得缩略图4上控件的窗口指针，再获取与该窗口关联的上下文指针 
+			CRect rect;
+			GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取缩略图4上控件的显示区 
+			pt[3].pDC = pDC;
+			pt[3].rect = rect;
+
+			close_thread4 = false;
+			pic_pthread4 = AfxBeginThread(ThreadProc4, &pt[3]);			//启动线程4来播放视频4
+
+			CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT4);
+			if (pBtn != NULL)
+			{
+				pBtn->EnableWindow(FALSE);
+			}
+		}
+		else
+			MessageBox(L"未检测到显示器4", L"报告");
+	}
+}
+
+
+
+//点击暂停按钮1
+void CSplitScreenDlg::OnBnClickedStop2()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	//单击缩略图一次时，如果视频正在播放，则暂停，反之则播放
+	if (pic[0].isOpen == true && pic[0].video_play == true)
+	{
+		pic_pthread1->SuspendThread();				//单击暂停
+		pic[0].video_play = false;
+		GetDlgItem(IDC_STOP2)->SetWindowText(L"播放");
+	}
+	else if (pic[0].isOpen == true && pic[0].video_play == false)
+	{
+		pic_pthread1->ResumeThread();				//单击继续播放
+		pic[0].video_play = true;
+		GetDlgItem(IDC_STOP2)->SetWindowText(L"暂停");
+	}
+
+}
+//点击暂停按钮2
+void CSplitScreenDlg::OnBnClickedStop1()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	if (pic[1].isOpen == true && pic[1].video_play == true)
+	{
+		pic_pthread2->SuspendThread();					//单击暂停
+		pic[1].video_play = false;
+		GetDlgItem(IDC_STOP1)->SetWindowText(L"播放");
+	}
+	else if (pic[1].isOpen == true && pic[1].video_play == false)
+	{
+		pic_pthread2->ResumeThread();	//单击继续播放
+		pic[1].video_play = true;
+		GetDlgItem(IDC_STOP1)->SetWindowText(L"暂停");
+	}
+}
+//点击暂停按钮3
+void CSplitScreenDlg::OnBnClickedStop3()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	if (pic[2].isOpen == true && pic[2].video_play == true)
+	{
+		pic_pthread3->SuspendThread();				//单击暂停
+		pic[2].video_play = false;
+		GetDlgItem(IDC_STOP3)->SetWindowText(L"播放");
+	}
+	else if (pic[2].isOpen == true && pic[2].video_play == false)
+	{
+		pic_pthread3->ResumeThread();	//单击继续播放
+		pic[2].video_play = true;
+		GetDlgItem(IDC_STOP3)->SetWindowText(L"暂停");
+	}
+}
+//点击暂停按钮4
+void CSplitScreenDlg::OnBnClickedStop4()
+{
+	// TODO: 在此添加控件通知处理程序代码
 	if (pic[3].isOpen == true && pic[3].video_play == true)
 	{
 		pic_pthread4->SuspendThread();				//单击暂停
 		pic[3].video_play = false;
+		GetDlgItem(IDC_STOP4)->SetWindowText(L"播放");
 	}
 	else if (pic[3].isOpen == true && pic[3].video_play == false)
 	{
 		pic_pthread4->ResumeThread();	//单击继续播放
 		pic[3].video_play = true;
+		GetDlgItem(IDC_STOP4)->SetWindowText(L"暂停");
 	}
 }
 
 
-void CSplitScreenDlg::OnBnClickedSyn()
-{
-	CString fileFilter = _T("媒体文件(*.wmv,*.mp3,*.avi,,*.rm,*.rmvb,*.mkv,*.mp4)|*.wmv;*.mp3;*.avi;*.rm;*.rmvb;*.mkv;*.mp4|");
-	CFileDialog filedlg(true, NULL, NULL, OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR, fileFilter);
-
-	if (filedlg.DoModal() == IDOK)
-	{
-		syn_videoPath = filedlg.GetPathName();
-		String path(CW2A(syn_videoPath.GetString()));
-
-		syn_capture.open(path);
-		if (!syn_capture.isOpened())
-			MessageBox(L"打开资源失败!");
-
-		//获取整个帧数
-		totalframe = static_cast<long>(syn_capture.get(CV_CAP_PROP_FRAME_COUNT));
-		OnBnClickedClose1();
-		OnBnClickedClose2();
-		OnBnClickedClose3();
-		OnBnClickedClose4();
-
-		dlg1 = new CPictureDlg();
-		dlg2 = new CPictureDlg();
-		dlg3 = new CPictureDlg();
-		dlg4 = new CPictureDlg();
-		dlg1->Create(IDD__PICTURE_SHOW, this);
-		dlg2->Create(IDD__PICTURE_SHOW, this);
-		dlg3->Create(IDD__PICTURE_SHOW, this);
-		dlg4->Create(IDD__PICTURE_SHOW, this);
-		SetTimer(5, delay, NULL);				//用于响应同步的定时器，定时时间和帧率一致
-
-	}
-	else
-		MessageBox(L"未检测到显示器", L"报告");
-
-}
-
-//定时播放视频
-void CSplitScreenDlg::OnTimer(UINT_PTR nIDEvent)
-{
-	//一键同步拼接显示
-	if (5 == nIDEvent)
-	{
-		if (syn_capture.read(syn_frame))		//循环读取视频的每一帧
-		{
-			if (currentframe <= totalframe)
-			{
-				imageROI1 = syn_frame(Range(0, syn_frame.rows / 2), Range(0, syn_frame.cols / 2));
-				imageROI2 = syn_frame(Range(0, syn_frame.rows / 2), Range((syn_frame.cols / 2) + 1, syn_frame.cols));
-				imageROI3 = syn_frame(Range((syn_frame.rows / 2) + 1, syn_frame.rows), Range(0, syn_frame.cols / 2));
-				imageROI4 = syn_frame(Range((syn_frame.rows / 2) + 1, syn_frame.rows), Range((syn_frame.cols / 2) + 1, syn_frame.cols));
-
-				dlg1->MoveWindow(rect[1].left, rect[1].top, rect[1].right, rect[1].bottom, true);
-				dlg1->showImage(imageROI1);
-				dlg2->MoveWindow(rect[2].left, rect[2].top, rect[2].right, rect[2].bottom, true);
-				dlg2->showImage(imageROI2);
-				dlg3->MoveWindow(rect[3].left, rect[3].top, rect[3].right, rect[3].bottom, true);
-				dlg3->showImage(imageROI3);
-				dlg4->MoveWindow(rect[4].left, rect[4].top, rect[4].right, rect[4].bottom, true);
-				dlg4->showImage(imageROI4);
-
-				//在四个图片缩略框中显示图片
-				CDC* pDC = GetDlgItem(IDC_SMALL_PICTURE1)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				HDC hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect1;
-				GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect1);		//获取IDC_SMALL_PICTURE4控件的显示区    
-
-				IplImage iplImg1 = IplImage(imageROI1);
-				CvvImage cvvImg1;											//创建一个CvvImage对象  
-				cvvImg1.CopyOf(&iplImg1);
-				cvvImg1.DrawToHDC(hDC, &rect1);
-				cvvImg1.Destroy();
-				ReleaseDC(pDC);
-
-				pDC = GetDlgItem(IDC_SMALL_PICTURE2)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect2;
-				GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect2);		//获取IDC_SMALL_PICTURE4控件的显示区    
-
-				IplImage iplImg2 = IplImage(imageROI2);
-				CvvImage cvvImg2;											//创建一个CvvImage对象  
-				cvvImg2.CopyOf(&iplImg2);
-				cvvImg2.DrawToHDC(hDC, &rect2);
-				cvvImg2.Destroy();
-				ReleaseDC(pDC);
-
-				pDC = GetDlgItem(IDC_SMALL_PICTURE3)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect3;
-				GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect3);		//获取IDC_SMALL_PICTURE4控件的显示区    
-
-				IplImage iplImg3 = IplImage(imageROI3);
-				CvvImage cvvImg3;											//创建一个CvvImage对象  
-				cvvImg3.CopyOf(&iplImg3);
-				cvvImg3.DrawToHDC(hDC, &rect3);
-				cvvImg3.Destroy();
-				ReleaseDC(pDC);
-
-				pDC = GetDlgItem(IDC_SMALL_PICTURE4)->GetDC();           //获得IDC_SMALL_PICTURE1控件的窗口指针，再获取与该窗口关联的上下文指针  
-				hDC = pDC->GetSafeHdc();								 // 获取设备上下文句柄  
-				CRect rect4;
-				GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect4);		//获取IDC_SMALL_PICTURE4控件的显示区    
-
-				IplImage iplImg4 = IplImage(imageROI4);
-				CvvImage cvvImg4;											//创建一个CvvImage对象  
-				cvvImg4.CopyOf(&iplImg4);
-				cvvImg4.DrawToHDC(hDC, &rect4);
-				cvvImg4.Destroy();
-				ReleaseDC(pDC);
-				currentframe++;
-			}
-		}
-	}
-	CDialogEx::OnTimer(nIDEvent);
-}
 
 //关闭屏幕1
 void CSplitScreenDlg::OnBnClickedClose1()
@@ -888,9 +871,16 @@ void CSplitScreenDlg::OnBnClickedClose1()
 		CRect rect;
 		GetDlgItem(IDC_SMALL_PICTURE1)->GetClientRect(&rect);		  //获取IDC_SMALL_PICTURE1控件的显示区   
 
-		COLORREF clrBack = pDC->GetBkColor();
-		CBrush br(clrBack);
+		DWORD dw = GetSysColor(COLOR_BTNFACE);
+		CBrush br(dw);
 		pDC->FillRect(rect, &br);
+		this->RedrawWindow();
+
+		CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT1);
+		if (pBtn != NULL)
+		{
+			pBtn->EnableWindow(TRUE);
+		}
 	}
 }
 //关闭屏幕2
@@ -913,9 +903,16 @@ void CSplitScreenDlg::OnBnClickedClose2()
 		CRect rect;
 		GetDlgItem(IDC_SMALL_PICTURE2)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
-		COLORREF clrBack = pDC->GetBkColor();
-		CBrush br(clrBack);
+		DWORD dw = GetSysColor(COLOR_BTNFACE);
+		CBrush br(dw);
 		pDC->FillRect(rect, &br);
+		this->RedrawWindow();
+
+		CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT2);
+		if (pBtn != NULL)
+		{
+			pBtn->EnableWindow(TRUE);
+		}
 	}
 }
 //关闭屏幕3
@@ -938,9 +935,16 @@ void CSplitScreenDlg::OnBnClickedClose3()
 		CRect rect;
 		GetDlgItem(IDC_SMALL_PICTURE3)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
-		COLORREF clrBack = pDC->GetBkColor();
-		CBrush br(clrBack);
+		DWORD dw = GetSysColor(COLOR_BTNFACE);
+		CBrush br(dw);
 		pDC->FillRect(rect, &br);
+		this->RedrawWindow();
+
+		CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT3);
+		if (pBtn != NULL)
+		{
+			pBtn->EnableWindow(TRUE);
+		}
 	}
 }
 //关闭屏幕4
@@ -963,49 +967,35 @@ void CSplitScreenDlg::OnBnClickedClose4()
 		CRect rect;
 		GetDlgItem(IDC_SMALL_PICTURE4)->GetClientRect(&rect);		//获取IDC_SMALL_PICTURE1控件的显示区   
 
-		COLORREF clrBack = pDC->GetBkColor();
-		CBrush br(clrBack);
+		DWORD dw = GetSysColor(COLOR_BTNFACE);
+		CBrush br(dw);
 		pDC->FillRect(rect, &br);
+		this->RedrawWindow();
+
+	//	或者用如下方法：
+	//	CStatic *pStatic = (CStatic *)GetDlgItem(IDC_SMALL_PICTURE4);
+	//	pStatic->SetBitmap(NULL);
+	//	this->RedrawWindow();
+
+		CButton *pBtn = (CButton *)GetDlgItem(IDC_IMPORT4);
+		if (pBtn != NULL)
+		{
+			pBtn->EnableWindow(TRUE);
+		}
 	}
 }
 
-//点击退出按钮
+
+
+//点击返回主菜单按钮
 void CSplitScreenDlg::OnBnClickedCancel()
 {
-	close_thread1 = true;
-	close_thread2 = true;
-	close_thread3 = true;
-	close_thread4 = true;
+	OnBnClickedClose1();
+	OnBnClickedClose2();
+	OnBnClickedClose3();
+	OnBnClickedClose4();
 
-	Sleep(200);			//等待200ms后才关闭资源，目的是让子线程有充足的时间去退出并释放资源
-
-	if (dlg1 != NULL)
-	{
-		delete dlg1;
-		dlg1 = NULL;
-	}
-	if (dlg2 != NULL)
-	{
-		delete dlg2;
-		dlg2 = NULL;
-	}
-	if (dlg3 != NULL)
-	{
-		delete dlg3;
-		dlg3 = NULL;
-	}
-	if (dlg4 != NULL)
-	{
-		delete dlg4;
-		dlg4 = NULL;
-	}
-	if (pt != NULL)
-	{
-		delete[] pt;
-		pt = NULL;
-	}
 	CDialogEx::OnCancel();							//关闭当前窗口
-	AfxGetMainWnd()->SendMessage(WM_CLOSE);			//关闭主界面窗口
 }
 //点击右上角关闭按钮
 void CSplitScreenDlg::OnClose()
@@ -1044,3 +1034,18 @@ void CSplitScreenDlg::OnClose()
 	CDialogEx::OnClose();						//关闭当前窗口
 	AfxGetMainWnd()->SendMessage(WM_CLOSE);		//关闭主界面窗口
 }
+
+
+//点击返回主菜单链接
+void CSplitScreenDlg::OnNMClickSyslink1(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	//*pResult = 0;
+	OnBnClickedClose1();
+	OnBnClickedClose2();
+	OnBnClickedClose3();
+	OnBnClickedClose4();
+
+	CDialogEx::OnCancel();							//关闭当前窗口
+}
+

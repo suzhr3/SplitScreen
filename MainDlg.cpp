@@ -5,6 +5,7 @@
 #include "SplitScreen.h"
 #include "SplitScreenDlg.h"
 #include "MainDlg.h"
+#include "SYNDlg.h"
 #include "afxdialogex.h"
 
 
@@ -31,6 +32,8 @@ void CMainDlg::DoDataExchange(CDataExchange* pDX)
 BEGIN_MESSAGE_MAP(CMainDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_SPLITSCREEN, &CMainDlg::OnBnClickedSplitscreen)
 	ON_BN_CLICKED(IDC_ALONE, &CMainDlg::OnBnClickedAlone)
+	ON_NOTIFY(NM_CLICK, IDC_HELP, &CMainDlg::OnNMClickHelp)
+	ON_NOTIFY(NM_CLICK, IDC_ABOUT, &CMainDlg::OnNMClickAbout)
 END_MESSAGE_MAP()
 
 
@@ -40,7 +43,7 @@ END_MESSAGE_MAP()
 void CMainDlg::OnBnClickedSplitscreen()
 {
 	this->ShowWindow(SW_HIDE);	//当前主界面隐藏
-	CSplitScreenDlg dlg;		
+	CSYNDlg dlg;
 	dlg.DoModal();
 	this->ShowWindow(SW_SHOW);
 }
@@ -52,4 +55,22 @@ void CMainDlg::OnBnClickedAlone()
 	CSplitScreenDlg dlg;
 	dlg.DoModal();
 	this->ShowWindow(SW_SHOW);
+}
+
+
+//点击帮助按钮
+void CMainDlg::OnNMClickHelp(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+
+}
+
+
+//点击关于按钮
+void CMainDlg::OnNMClickAbout(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+
 }

@@ -20,6 +20,8 @@ public:
 	CPictureDlg(CWnd* pParent = NULL);   // 标准构造函数
 	virtual ~CPictureDlg();
 
+	BOOL OnInitDialog();
+
 	//在图片控件上显示图片image
 	void showImage(Mat& image);			
 	//在缩略图控件上显示图片frame

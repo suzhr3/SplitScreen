@@ -28,12 +28,6 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
 
 public:
-
-	CUiThread* pThread1;
-	CUiThread* pThread2;
-	CUiThread* pThread3;
-	CUiThread* pThread4;
-
 	//四个工作者线程
 	CWinThread* pic_pthread1;
 	CWinThread* pic_pthread2;
@@ -51,7 +45,6 @@ protected:
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
 public:
-	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnStnDblclickSmallPicture1();
 	afx_msg void OnStnDblclickSmallPicture2();
 	afx_msg void OnStnDblclickSmallPicture3();
@@ -65,6 +58,14 @@ public:
 	afx_msg void OnBnClickedClose2();
 	afx_msg void OnBnClickedClose3();
 	afx_msg void OnBnClickedClose4();
-	afx_msg void OnBnClickedSyn();
 	afx_msg void OnClose();
+	afx_msg void OnNMClickSyslink1(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnBnClickedImport1();
+	afx_msg void OnBnClickedImport2();
+	afx_msg void OnBnClickedImport3();
+	afx_msg void OnBnClickedImport4();
+	afx_msg void OnBnClickedStop2();
+	afx_msg void OnBnClickedStop1();
+	afx_msg void OnBnClickedStop3();
+	afx_msg void OnBnClickedStop4();
 };
