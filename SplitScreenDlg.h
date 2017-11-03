@@ -6,10 +6,13 @@
 
 using namespace std;
 
-//四个线程函数
+//四个全局的线程函数
 UINT ThreadProc1(LPVOID pM);
+
 UINT ThreadProc2(LPVOID pM);
+
 UINT ThreadProc3(LPVOID pM);
+
 UINT ThreadProc4(LPVOID pM);
 
 // CSplitScreenDlg 对话框
@@ -19,20 +22,34 @@ class CSplitScreenDlg : public CDialogEx
 public:
 	CSplitScreenDlg(CWnd* pParent = NULL);	// 标准构造函数
 	~CSplitScreenDlg();						//析构函数
+
 // 对话框数据
 #ifdef AFX_DESIGN_TIME
 	enum { IDD = IDD_SPLITSCREEN_DIALOG };
 #endif
 
 protected:
-	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
+	// DDX/DDV 支持
+	virtual void DoDataExchange(CDataExchange* pDX);	
 
 public:
 	//四个工作者线程
 	CWinThread* pic_pthread1;
+
 	CWinThread* pic_pthread2;
+
 	CWinThread* pic_pthread3;
+
 	CWinThread* pic_pthread4;
+
+	//四个用户交互界面线程
+	CUiThread* ui_pthread1;
+
+	CUiThread* ui_pthread2;
+
+	CUiThread* ui_pthread3;
+
+	CUiThread* ui_pthread4;
 
 // 实现
 protected:
@@ -44,6 +61,7 @@ protected:
 	afx_msg void OnPaint();
 	afx_msg HCURSOR OnQueryDragIcon();
 	DECLARE_MESSAGE_MAP()
+
 public:
 	afx_msg void OnStnDblclickSmallPicture1();
 	afx_msg void OnStnDblclickSmallPicture2();
@@ -68,4 +86,5 @@ public:
 	afx_msg void OnBnClickedStop1();
 	afx_msg void OnBnClickedStop3();
 	afx_msg void OnBnClickedStop4();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 };

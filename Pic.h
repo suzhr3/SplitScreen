@@ -12,14 +12,21 @@ class Pic
 {
 public:
 	Pic();
+
 	Pic(VideoCapture capture, String videoPath, long totalFrameNumber, long currentFrame, Mat frame, bool isOpen, bool video_play);
 
 public:
 	VideoCapture capture;
+
 	String videoPath;
+
 	Mat frame;
+
 	long totalFrameNumber;
+
 	long currentFrame;
+
 	bool isOpen;
+
 	bool video_play;
 };

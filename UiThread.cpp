@@ -5,26 +5,32 @@
 #include "Pic.h"
 #include "PictureDlg.h"
 
+//构造函数
+
 CUiThread::CUiThread()
 {
 	currentFrame = 0;
 }
 
+//析构函数
 
 CUiThread::~CUiThread()
 {
-	//delete dlg;
 }
+
+//UI线程对话框初始化函数
 
 BOOL CUiThread::InitInstance()
 {
-	//dlg = new CPictureDlg();
-	//dlg->Create(IDD__PICTURE_SHOW);			//创建该线程显示的对话框窗口
+	dlg = new CPictureDlg();
+	dlg->Create(IDD__PICTURE_SHOW);			//创建该线程显示的对话框窗口
 
 	m_pMainWnd = dlg;						//设置CWinThread类的m_pMainWnd成员，否则这个线程不会随着界面的关闭而退出。
 
 	return true;
 }
+
+//UI线程对话框退出时自动执行的退出函数
 
 int CUiThread::ExitInstance()
 {
@@ -33,11 +39,14 @@ int CUiThread::ExitInstance()
 	return 0;
 }
 
+//重写的线程Run函数
+
 int CUiThread::Run()
 {
 	capture.open(path);
 	if (!capture.isOpened())
 		AfxMessageBox(L"打开资源失败!");
+
 	//获取视频总帧数
 	totalFrameNumber = static_cast<long>(capture.get(CV_CAP_PROP_FRAME_COUNT));
 	dlg->MoveWindow(rect.left, rect.top, rect.right, rect.bottom, true);
@@ -55,40 +64,37 @@ int CUiThread::Run()
 			{
 				break;
 			}
-			Sleep(1);
+			Sleep(20);
 		}
 		else
+		{
 			break;
+		}
+			
 	}
 	return 0;
 }
 
-
-//HWND hWnd = (HWND)ptr;
-/*for (int i = 0; i<100; ++i)
+//循环遍历消息队列函数
+void CUiThread::message()
 {
-::PostMessage(hWnd, WM_USER_MSG, WPARAM(i), LPARAM(0));
-Sleep(100);
+	MSG msg;
+
+	//循环取出消息队列中的消息并分发下去
+	while (1)
+	{
+		GetMessage(&msg, NULL, 0, 0);
+		DispatchMessage(&msg);
+	}
 }
-AfxMessageBox(L"完成");
-::PostMessage(hWnd, WM_USER_MSG, WPARAM(0), LPARAM(0));
-_endthread();*/
 
-//void CUiThread::run()
-//{
-//	MSG msg;
-//	while (1)
-//	{
-//		GetMessage(&msg, NULL, 0, 0);
-//		DispatchMessage(&msg);
-//	}
-//}
-
-//BOOL CUiThread::PreTranslateMessage(MSG* pMsg)
-//{
-//	// TODO: Add your specialized code here and/or call the base class
-//	if (pMsg->message == WM_SPLASH_NOTIFY)
-//	{
-//	}
-//	return CWinThread::PreTranslateMessage(pMsg);
-//}
+//接收到来自主线程的消息
+BOOL CUiThread::PreTranslateMessage(MSG* pMsg)
+{
+	// TODO: Add your specialized code here and/or call the base class
+	if (pMsg->message == WM_SPLASH_NOTIFY)
+	{
+		message();
+	}
+	return CWinThread::PreTranslateMessage(pMsg);
+}

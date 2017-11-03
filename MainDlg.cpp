@@ -6,6 +6,8 @@
 #include "SplitScreenDlg.h"
 #include "MainDlg.h"
 #include "SYNDlg.h"
+#include "HelpDlg.h"
+#include "About.h"
 #include "afxdialogex.h"
 
 
@@ -42,18 +44,28 @@ END_MESSAGE_MAP()
 //一键拼接分屏界面
 void CMainDlg::OnBnClickedSplitscreen()
 {
-	this->ShowWindow(SW_HIDE);	//当前主界面隐藏
+
+	//隐藏当前登录主界面
+	this->ShowWindow(SW_HIDE);	
+
 	CSYNDlg dlg;
 	dlg.DoModal();
+
+	//显示拼接播放的控制界面
 	this->ShowWindow(SW_SHOW);
 }
 
 //单独播放界面
 void CMainDlg::OnBnClickedAlone()
 {
-	this->ShowWindow(SW_HIDE);	//当前主界面隐藏
+	// TODO: 在此添加控件通知处理程序代码
+	//隐藏当前登录主界面
+	this->ShowWindow(SW_HIDE);	
+
 	CSplitScreenDlg dlg;
 	dlg.DoModal();
+
+	//显示单独播放的控制界面
 	this->ShowWindow(SW_SHOW);
 }
 
@@ -64,6 +76,15 @@ void CMainDlg::OnNMClickHelp(NMHDR *pNMHDR, LRESULT *pResult)
 	// TODO: 在此添加控件通知处理程序代码
 	*pResult = 0;
 
+	//隐藏当前登录主界面
+	this->ShowWindow(SW_HIDE);
+
+	CHelpDlg dlg;
+	dlg.DoModal();
+
+	//显示单独播放的控制界面
+	this->ShowWindow(SW_SHOW);
+
 }
 
 
@@ -73,4 +94,9 @@ void CMainDlg::OnNMClickAbout(NMHDR *pNMHDR, LRESULT *pResult)
 	// TODO: 在此添加控件通知处理程序代码
 	*pResult = 0;
 
+	CAbout dlg;
+	dlg.DoModal();
+
+	//显示单独播放的控制界面
+	this->ShowWindow(SW_SHOW);
 }

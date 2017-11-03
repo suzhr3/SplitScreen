@@ -185,7 +185,9 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="About.h" />
     <ClInclude Include="CvvImage.h" />
+    <ClInclude Include="HelpDlg.h" />
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="Pic.h" />
     <ClInclude Include="PictureDlg.h" />
@@ -198,7 +200,9 @@
     <ClInclude Include="UiThread.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="About.cpp" />
     <ClCompile Include="CvvImage.cpp" />
+    <ClCompile Include="HelpDlg.cpp" />
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="Pic.cpp" />
     <ClCompile Include="PictureDlg.cpp" />

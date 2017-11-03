@@ -12,6 +12,7 @@
 
 
 // CSplitScreenApp: 
+
 // 有关此类的实现，请参阅 SplitScreen.cpp
 
 class CSplitScreenApp : public CWinApp
@@ -20,7 +21,9 @@ public:
 	CSplitScreenApp();
 
 public: 
-	bool openExpanseDlg = false;		//全局变量
+	//全局变量
+	bool openExpanseDlg = false;		
+
 // 重写
 public:
 	virtual BOOL InitInstance();

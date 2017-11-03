@@ -20,7 +20,10 @@ protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV Ö§³Ö
 
 	DECLARE_MESSAGE_MAP()
+
 public:
 	afx_msg void OnBnClickedSplitscreen();
 	afx_msg void OnBnClickedAlone();
+	afx_msg void OnNMClickHelp(NMHDR *pNMHDR, LRESULT *pResult);
+	afx_msg void OnNMClickAbout(NMHDR *pNMHDR, LRESULT *pResult);
 };
